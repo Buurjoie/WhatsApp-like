@@ -11,15 +11,23 @@ export function useWebSocket({ onMessage, onConnect, onDisconnect }: UseWebSocke
   const [isConnected, setIsConnected] = useState(false);
   const ws = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const isConnecting = useRef(false);
 
   const connect = useCallback(() => {
+    // Prevent multiple connection attempts
+    if (isConnecting.current || (ws.current && ws.current.readyState !== WebSocket.CLOSED)) {
+      return;
+    }
+
     try {
+      isConnecting.current = true;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      const wsUrl = `${protocol}//${window.location.host}/api/ws`;
       
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
+        isConnecting.current = false;
         setIsConnected(true);
         onConnect?.();
         console.log('WebSocket connected');
@@ -34,18 +42,23 @@ export function useWebSocket({ onMessage, onConnect, onDisconnect }: UseWebSocke
         }
       };
 
-      ws.current.onclose = () => {
+      ws.current.onclose = (event) => {
+        isConnecting.current = false;
         setIsConnected(false);
         onDisconnect?.();
-        console.log('WebSocket disconnected');
+        console.log('WebSocket disconnected:', event.code, event.reason);
         
-        // Attempt to reconnect after 3 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, 3000);
+        // Only attempt to reconnect if it wasn't a clean close and not already connecting
+        if (event.code !== 1000 && !isConnecting.current) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            console.log('Attempting to reconnect WebSocket...');
+            connect();
+          }, 5000);
+        }
       };
 
       ws.current.onerror = (error) => {
+        isConnecting.current = false;
         console.error('WebSocket error:', error);
       };
     } catch (error) {

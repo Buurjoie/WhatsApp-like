@@ -32,11 +32,13 @@ export class MemStorage implements IStorage {
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
     const id = this.currentId++;
     const message: Message = {
-      ...insertMessage,
       id,
+      content: insertMessage.content,
+      type: insertMessage.type,
       timestamp: new Date(),
       isEdited: false,
       editedAt: null,
+      status: insertMessage.status ?? "sent",
     };
     this.messages.set(id, message);
     return message;

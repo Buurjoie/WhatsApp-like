@@ -1,8 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { insertMessageSchema, updateMessageSchema, wsMessageSchema } from "@shared/schema";
+import { insertMessageSchema, updateMessageSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -22,54 +21,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const messageData = insertMessageSchema.parse(req.body);
       const message = await storage.createMessage(messageData);
-      
-      // Broadcast to all WebSocket clients
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: "message",
-            data: message
-          }));
-        }
-      });
 
       // Generate bot response for user messages
       if (messageData.type === "sent") {
         setTimeout(async () => {
-          // Send typing indicator
-          wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-              client.send(JSON.stringify({
-                type: "typing",
-                data: { isTyping: true }
-              }));
-            }
+          const botResponse = generateBotResponse(messageData.content);
+          await storage.createMessage({
+            content: botResponse,
+            type: "received",
+            status: "read"
           });
-
-          // Simulate typing delay
-          setTimeout(async () => {
-            const botResponse = generateBotResponse(messageData.content);
-            const botMessage = await storage.createMessage({
-              content: botResponse,
-              type: "received",
-              status: "read"
-            });
-
-            // Stop typing and send bot message
-            wss.clients.forEach(client => {
-              if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
-                  type: "stopTyping",
-                  data: { isTyping: false }
-                }));
-                client.send(JSON.stringify({
-                  type: "message",
-                  data: botMessage
-                }));
-              }
-            });
-          }, 1500 + Math.random() * 1000);
-        }, 500);
+        }, 1500 + Math.random() * 1000);
       }
 
       res.json(message);
@@ -91,16 +53,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!updatedMessage) {
         return res.status(404).json({ error: "Message not found" });
       }
-
-      // Broadcast update to all WebSocket clients
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: "messageUpdate",
-            data: updatedMessage
-          }));
-        }
-      });
 
       res.json(updatedMessage);
     } catch (error) {
@@ -127,31 +79,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // WebSocket server
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
-  wss.on('connection', (ws) => {
-    console.log('Client connected');
-
-    ws.on('message', (data) => {
-      try {
-        const message = wsMessageSchema.parse(JSON.parse(data.toString()));
-        
-        // Broadcast to all other clients
-        wss.clients.forEach(client => {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(message));
-          }
-        });
-      } catch (error) {
-        console.error('Invalid WebSocket message:', error);
-      }
-    });
-
-    ws.on('close', () => {
-      console.log('Client disconnected');
-    });
-  });
 
   return httpServer;
 }

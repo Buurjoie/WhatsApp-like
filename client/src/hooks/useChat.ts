@@ -8,6 +8,7 @@ export function useChat() {
 
   const { data: messages = [], isLoading } = useQuery<Message[]>({
     queryKey: ['/api/messages'],
+    refetchInterval: 2000, // Polling every 2 seconds for real-time updates
   });
 
   const sendMessageMutation = useMutation({

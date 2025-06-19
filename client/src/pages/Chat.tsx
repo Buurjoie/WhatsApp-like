@@ -16,15 +16,8 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const { messages, sendMessage, editMessage, loading } = useChat();
-  const { isConnected } = useWebSocket({
-    onMessage: (data) => {
-      if (data.type === 'typing') {
-        setIsTyping(data.data.isTyping);
-      } else if (data.type === 'stopTyping') {
-        setIsTyping(false);
-      }
-    }
-  });
+  
+  const isConnected = true; // Simplified without WebSocket for better stability
 
   // Theme management
   useEffect(() => {
